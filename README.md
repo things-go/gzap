@@ -1,15 +1,16 @@
 # gzap
 
+gzap is a zap middleware for [Gin](https://github.com/gin-gonic/gin)  
+
 [![GoDoc](https://godoc.org/github.com/things-go/gzap?status.svg)](https://godoc.org/github.com/things-go/gzap)
 [![Go.Dev reference](https://img.shields.io/badge/go.dev-reference-blue?logo=go&logoColor=white)](https://pkg.go.dev/github.com/things-go/gzap?tab=doc)
-[![Build Status](https://travis-ci.org/things-go/gzap.svg)](https://travis-ci.org/things-go/gzap)
+[![Build Status](https://travis-ci.com/things-go/gzap.svg)](https://travis-ci.com/things-go/gzap)
 [![codecov](https://codecov.io/gh/things-go/gzap/branch/master/graph/badge.svg)](https://codecov.io/gh/things-go/gzap)
 ![Action Status](https://github.com/things-go/gzap/workflows/Go/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/things-go/gzap)](https://goreportcard.com/report/github.com/things-go/gzap)
 [![Licence](https://img.shields.io/github/license/things-go/gzap)](https://raw.githubusercontent.com/things-go/gzap/master/LICENSE)
 [![Tag](https://img.shields.io/github/v/tag/things-go/gzap)](https://github.com/thinkgos/requestid/tags)
 
-gzap is an zap middleware for [Gin](https://github.com/gin-gonic/gin)
 
 ## Installation
 
