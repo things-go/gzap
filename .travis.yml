@@ -9,8 +9,6 @@ go:
   - 1.15.x
   - 1.16.x
 
-go_import_path: github.com/thinkgos/TODO_ADD_PACKAGENAME
-
 before_install:
   - if [[ "${GO111MODULE}" = "on" ]]; then mkdir "${HOME}/go"; export GOPATH="${HOME}/go";
     export PATH="$GOPATH/bin:$PATH"; fi
