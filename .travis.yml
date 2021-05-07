@@ -1,0 +1,45 @@
+language: go
+
+os:
+  - osx
+  - windows
+  - linux
+
+go:
+  - 1.15.x
+  - 1.16.x
+
+go_import_path: github.com/thinkgos/TODO_ADD_PACKAGENAME
+
+before_install:
+  - if [[ "${GO111MODULE}" = "on" ]]; then mkdir "${HOME}/go"; export GOPATH="${HOME}/go";
+    export PATH="$GOPATH/bin:$PATH"; fi
+  - mkdir -p ~/bin/ && export PATH="~/bin/:$PATH"
+
+install:
+  - go get -u golang.org/x/lint/golint
+  - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+  - curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+script:
+  - go get -v ./...
+  - |-
+    case $TRAVIS_OS_NAME in
+      linux|osx)
+        golint ./... | reviewdog -f=golint -reporter=github-check
+        golangci-lint run --out-format=line-number -E goimports -E misspell | reviewdog -f=golangci-lint -reporter=github-check
+        golint ./... | reviewdog -f=golint -reporter=github-pr-review
+        golangci-lint run --out-format=line-number -E goimports -E misspell | reviewdog -f=golangci-lint -reporter=github-pr-review
+        ;;
+    esac
+  - go test -v -benchmem -test.bench=".*" -coverprofile=coverage.txt -covermode=atomic  ./...
+
+after_success:
+  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then curl -s https://codecov.io/bash >
+    .codecov && chmod +x .codecov && ./.codecov; else bash <(curl -s https://codecov.io/bash);
+    fi
+
+env:
+  global:
+    - GO111MODULE=on
+    - secure: RNl2GH4xo5vHp+7aAjj8zOXCrNB4PSxjbUJAAvsaEyM+8dcS9D96IaN+N9zzcltSN4JbamCgd9PjFoo4SmAdFnlmboTOFMlCK9dX1Mjfjq5BBLNej+9tFYCJb6iJsEN5Bk7VF/7B/kU/WWQfEGfvK/8le0aFHAv4DSbZZl+lkvL5nkxkUvSogKWKX/DPbeHw6t9Iu51VHrrT9dxjFkVg33QDE/VRlhTVJwOwXhwrpXZ+OqsG5Z1Ajey6vEQQOIowCZ0IwWjVwoPEx1xuUOSoEXigaOoUe8cYmb9f5vS061LkN0WqW/Wfrh5VwAMITOkB2r/93i2Ysv69AYDKMYmji3+rY4+z/1BvzwkAwKb59CvF6SqaFikGuXIMid9ccIj2rncq0potoax1Zpnu4YVtHjvisCIjyRyGpnp8wq61R/9qogDSzuHXRVIz659uMNlERsq/WvYqHB2DaIiTj5VD4GQQBkYDWhTOVGsPbGC8nNxOWoU30cwSV8A5Az/COT50pdjfZ4tIyAyKd6N42D9Oz9pMFeHkikXP7uQOACD1ZQPzuZwGEUU20L8poqBnAU8Elm7liRlR9x0B3uun00IW15BZd9usmcW7nnSbtTzzlXU6TIVsGJ88Jnlt1PvxcZT13YJcxxcFYy4mLk20VmncX3LeMxne1z1n0vAHvz95o18=
