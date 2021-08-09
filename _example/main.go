@@ -24,6 +24,7 @@ func main() {
 		gzap.WithTimeFormat(time.RFC3339),
 		gzap.WithUTC(),
 		gzap.WithCustomFields(
+			gzap.Immutable("service", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),
@@ -33,6 +34,7 @@ func main() {
 	//   - stack means whether output the stack info.
 	r.Use(gzap.Recovery(logger, true,
 		gzap.WithCustomFields(
+			gzap.Immutable("service", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),

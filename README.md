@@ -11,13 +11,21 @@ gzap is a zap middleware for [Gin](https://github.com/gin-gonic/gin)
 [![Tag](https://img.shields.io/github/v/tag/things-go/gzap)](https://github.com/thinkgos/requestid/tags)
 
 
-## Installation
+## Usage
 
+### Installation
+
+Use go get.
 ```bash
     go get github.com/things-go/gzap
 ```
 
-## Example
+Then import the modbus package into your own code.
+```go
+    import "github.com/things-go/gzap"
+```
+
+### Example
 
 [embedmd]:# (_example/main.go go)
 ```go
@@ -47,6 +55,7 @@ func main() {
 		gzap.WithTimeFormat(time.RFC3339),
 		gzap.WithUTC(),
 		gzap.WithCustomFields(
+			gzap.Immutable("service", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),
@@ -56,6 +65,7 @@ func main() {
 	//   - stack means whether output the stack info.
 	r.Use(gzap.Recovery(logger, true,
 		gzap.WithCustomFields(
+			gzap.Immutable("service", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),
