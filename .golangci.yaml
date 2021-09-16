@@ -81,19 +81,18 @@ linters:
     - gocritic
     - gofmt
     - goimports
-    - golint
+    - revive
     - goprintffuncname
     - gosimple
     - govet
     - ineffassign
-    - interfacer
     - lll
     - misspell
     - nakedret
     - noctx
     - nolintlint
     - rowserrcheck
-    - scopelint
+    - exportloopref
     - staticcheck
     - structcheck
     - stylecheck
@@ -130,7 +129,7 @@ issues:
       linters:
         - gomnd
         - goconst
-        - scopelint
+        - exportloopref
         - lll
     # https://github.com/go-critic/go-critic/issues/926
     - linters:
@@ -142,6 +141,6 @@ run:
     - .github
 
 service:
-  golangci-lint-version: 1.30.x # use the fixed version to not introduce new linters unexpectedly
+  golangci-lint-version: 1.41.x # use the fixed version to not introduce new linters unexpectedly
   prepare:
     - echo "here I can run custom commands, but no preparation needed for this repo"
