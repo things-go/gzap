@@ -164,3 +164,9 @@ func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// Immutable custom immutable field
+func Immutable(key string, value interface{}) func(c *gin.Context) zap.Field {
+	field := zap.Any(key, value)
+	return func(c *gin.Context) zap.Field { return field }
+}
