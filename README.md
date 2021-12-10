@@ -20,7 +20,7 @@ Use go get.
     go get github.com/things-go/gzap
 ```
 
-Then import the modbus package into your own code.
+Then import the gazp package into your own code.
 ```go
     import "github.com/things-go/gzap"
 ```

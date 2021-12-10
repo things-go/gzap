@@ -40,11 +40,22 @@ func WithCustomFields(fields ...func(c *gin.Context) zap.Field) Option {
 	}
 }
 
+// WithSkipLogging optional custom skip logging option.
+func WithSkipLogging(f func(c *gin.Context) bool) Option {
+	return func(c *Config) {
+		if f != nil {
+			c.skipLogging = f
+		}
+	}
+}
+
 // Config logger/recover config
 type Config struct {
 	timeFormat   string
 	utc          bool
 	customFields []func(c *gin.Context) zap.Field
+	// if returns true, it will skip logging.
+	skipLogging func(c *gin.Context) bool
 }
 
 // Logger returns a gin.HandlerFunc (middleware) that logs requests using uber-go/zap.
@@ -56,6 +67,7 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 		time.RFC3339Nano,
 		false,
 		nil,
+		func(c *gin.Context) bool { return false },
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -66,6 +78,10 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
 		c.Next()
+
+		if cfg.skipLogging(c) {
+			return
+		}
 
 		end := time.Now()
 		latency := end.Sub(start)
@@ -108,6 +124,7 @@ func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
 		time.RFC3339Nano,
 		false,
 		nil,
+		func(c *gin.Context) bool { return false },
 	}
 	for _, opt := range opts {
 		opt(&cfg)

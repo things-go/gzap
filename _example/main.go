@@ -28,6 +28,9 @@ func main() {
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),
+		gzap.WithSkipLogging(func(c *gin.Context) bool {
+			return c.Request.URL.Path == "/skiplogging"
+		}),
 	))
 
 	// Logs all panic to error log
@@ -53,6 +56,10 @@ func main() {
 	r.GET("/error", func(c *gin.Context) {
 		c.Error(errors.New("An error happen 1")) // nolint: errcheck
 		c.Error(errors.New("An error happen 2")) // nolint: errcheck
+	})
+
+	r.GET("/skiplogging", func(c *gin.Context) {
+		c.String(200, "i am skip logging, log should be not output")
 	})
 
 	// Listen and Server in 0.0.0.0:8080
