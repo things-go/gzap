@@ -4,6 +4,8 @@
 package gzap
 
 import (
+	"bytes"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -18,20 +20,6 @@ import (
 
 // Option logger/recover option
 type Option func(c *Config)
-
-// WithTimeFormat optional a time package format string (e.g. time.RFC3339).
-func WithTimeFormat(layout string) Option {
-	return func(c *Config) {
-		c.timeFormat = layout
-	}
-}
-
-// WithUTC a boolean stating whether to use UTC time zone or local.(default local).
-func WithUTC() Option {
-	return func(c *Config) {
-		c.utc = true
-	}
-}
 
 // WithCustomFields optional custom field
 func WithCustomFields(fields ...func(c *gin.Context) zap.Field) Option {
@@ -49,13 +37,28 @@ func WithSkipLogging(f func(c *gin.Context) bool) Option {
 	}
 }
 
+// WithEnableBody optional custom enable request/response body.
+func WithEnableBody() Option {
+	return func(c *Config) {
+		c.enableBody = true
+	}
+}
+
+// WithEnableBody optional custom request/response body limit.
+// default: <=0, mean not limit
+func WithBodyLimit(limit int) Option {
+	return func(c *Config) {
+		c.limit = limit
+	}
+}
+
 // Config logger/recover config
 type Config struct {
-	timeFormat   string
-	utc          bool
 	customFields []func(c *gin.Context) zap.Field
 	// if returns true, it will skip logging.
 	skipLogging func(c *gin.Context) bool
+	enableBody  bool // enable request/response body
+	limit       int  // <=0: mean not limit
 }
 
 // Logger returns a gin.HandlerFunc (middleware) that logs requests using uber-go/zap.
@@ -64,54 +67,79 @@ type Config struct {
 // Requests without errors are logged using zap.Info().
 func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 	cfg := Config{
-		time.RFC3339Nano,
-		false,
 		nil,
 		func(c *gin.Context) bool { return false },
+		false,
+		0,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 	return func(c *gin.Context) {
+		respBody := &strings.Builder{}
+		reqBody := ""
+
+		if cfg.enableBody {
+			c.Writer = &bodyWriter{ResponseWriter: c.Writer, dupBody: respBody}
+			reqBodyBuf, err := io.ReadAll(c.Request.Body)
+			if err != nil {
+				c.String(http.StatusInternalServerError, err.Error())
+				c.Abort()
+				return
+			}
+			c.Request.Body.Close()
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBodyBuf))
+
+			if cfg.limit > 0 && len(reqBodyBuf) >= cfg.limit {
+				reqBody = "ignore larger req body"
+			} else {
+				reqBody = string(reqBodyBuf)
+			}
+		}
+
 		start := time.Now()
 		// some evil middlewares modify this values
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
+
+		defer func() {
+			if cfg.skipLogging(c) {
+				return
+			}
+
+			if len(c.Errors) > 0 {
+				// Append error field if this is an erroneous request.
+				for _, e := range c.Errors.Errors() {
+					logger.Error(e)
+				}
+			} else {
+				fields := make([]zap.Field, 0, 8+len(cfg.customFields)+2)
+				fields = append(fields,
+					zap.Int("status", c.Writer.Status()),
+					zap.String("method", c.Request.Method),
+					zap.String("path", path),
+					zap.String("route", c.FullPath()),
+					zap.String("query", query),
+					zap.String("ip", c.ClientIP()),
+					zap.String("user-agent", c.Request.UserAgent()),
+					zap.Duration("latency", time.Since(start)),
+				)
+				if cfg.enableBody {
+					fields = append(fields, zap.String("requestBody", reqBody))
+					if cfg.limit > 0 && respBody.Len() >= cfg.limit {
+						fields = append(fields, zap.String("responseBody", "ignore larger response body"))
+					} else {
+						fields = append(fields, zap.String("responseBody", respBody.String()))
+					}
+				}
+				for _, field := range cfg.customFields {
+					fields = append(fields, field(c))
+				}
+				logger.Info("logging", fields...)
+			}
+		}()
+
 		c.Next()
-
-		if cfg.skipLogging(c) {
-			return
-		}
-
-		end := time.Now()
-		latency := end.Sub(start)
-		if cfg.utc {
-			end = end.UTC()
-		}
-
-		if len(c.Errors) > 0 {
-			// Append error field if this is an erroneous request.
-			for _, e := range c.Errors.Errors() {
-				logger.Error(e)
-			}
-		} else {
-			fields := make([]zap.Field, 0, 9+len(cfg.customFields))
-			fields = append(fields,
-				zap.Int("status", c.Writer.Status()),
-				zap.String("method", c.Request.Method),
-				zap.String("path", path),
-				zap.String("route", c.FullPath()),
-				zap.String("query", query),
-				zap.String("ip", c.ClientIP()),
-				zap.String("user-agent", c.Request.UserAgent()),
-				zap.String("time", end.Format(cfg.timeFormat)),
-				zap.Duration("latency", latency),
-			)
-			for _, field := range cfg.customFields {
-				fields = append(fields, field(c))
-			}
-			logger.Info(path, fields...)
-		}
 	}
 }
 
@@ -122,10 +150,10 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 // The stack info is easy to find where the error occurs but the stack info is too large.
 func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
 	cfg := Config{
-		time.RFC3339Nano,
-		false,
 		nil,
 		func(c *gin.Context) bool { return false },
+		false,
+		0,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -162,25 +190,35 @@ func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
 					return
 				}
 
-				now := time.Now()
-				if cfg.utc {
-					now = now.UTC()
-				}
-				fields := make([]zap.Field, 0, 3+len(cfg.customFields))
+				fields := make([]zap.Field, 0, 2+len(cfg.customFields))
 				fields = append(fields,
-					zap.String("time", now.Format(cfg.timeFormat)),
 					zap.Any("error", err),
 					zap.ByteString("request", httpRequest),
 				)
 				for _, field := range cfg.customFields {
 					fields = append(fields, field(c))
 				}
-				logger.Error("[Recovery from panic]", fields...)
+				logger.Error("recovery from panic", fields...)
 				c.AbortWithStatus(http.StatusInternalServerError)
 			}
 		}()
 		c.Next()
 	}
+}
+
+type bodyWriter struct {
+	gin.ResponseWriter
+	dupBody *strings.Builder
+}
+
+func (w *bodyWriter) Write(b []byte) (int, error) {
+	w.dupBody.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *bodyWriter) WriteString(s string) (int, error) {
+	w.dupBody.WriteString(s)
+	return w.ResponseWriter.WriteString(s)
 }
 
 // Immutable custom immutable field

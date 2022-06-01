@@ -21,23 +21,22 @@ func main() {
 	//   - Logs to stdout.
 	//   - RFC3339 with UTC time format.
 	r.Use(gzap.Logger(logger,
-		gzap.WithTimeFormat(time.RFC3339),
-		gzap.WithUTC(),
 		gzap.WithCustomFields(
-			gzap.String("service", "example"),
+			gzap.String("app", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),
 		gzap.WithSkipLogging(func(c *gin.Context) bool {
 			return c.Request.URL.Path == "/skiplogging"
 		}),
+		gzap.WithEnableBody(),
 	))
 
 	// Logs all panic to error log
 	//   - stack means whether output the stack info.
 	r.Use(gzap.Recovery(logger, true,
 		gzap.WithCustomFields(
-			gzap.Immutable("service", "example"),
+			gzap.Immutable("app", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),
