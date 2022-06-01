@@ -38,9 +38,9 @@ func WithSkipLogging(f func(c *gin.Context) bool) Option {
 }
 
 // WithEnableBody optional custom enable request/response body.
-func WithEnableBody() Option {
+func WithEnableBody(b bool) Option {
 	return func(c *Config) {
-		c.enableBody = true
+		c.enableBody = b
 	}
 }
 

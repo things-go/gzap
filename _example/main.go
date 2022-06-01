@@ -29,7 +29,7 @@ func main() {
 		gzap.WithSkipLogging(func(c *gin.Context) bool {
 			return c.Request.URL.Path == "/skiplogging"
 		}),
-		gzap.WithEnableBody(),
+		gzap.WithEnableBody(true),
 	))
 
 	// Logs all panic to error log
