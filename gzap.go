@@ -95,11 +95,12 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 				logger.Error(e)
 			}
 		} else {
-			fields := make([]zap.Field, 0, 8+len(cfg.customFields))
+			fields := make([]zap.Field, 0, 9+len(cfg.customFields))
 			fields = append(fields,
 				zap.Int("status", c.Writer.Status()),
 				zap.String("method", c.Request.Method),
 				zap.String("path", path),
+				zap.String("route", c.FullPath()),
 				zap.String("query", query),
 				zap.String("ip", c.ClientIP()),
 				zap.String("user-agent", c.Request.UserAgent()),
@@ -183,7 +184,37 @@ func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
 }
 
 // Immutable custom immutable field
+// Deprecated: use Any instead
 func Immutable(key string, value interface{}) func(c *gin.Context) zap.Field {
+	return Any(key, value)
+}
+
+// Any custom immutable any field
+func Any(key string, value interface{}) func(c *gin.Context) zap.Field {
 	field := zap.Any(key, value)
+	return func(c *gin.Context) zap.Field { return field }
+}
+
+// String custom immutable string field
+func String(key string, value string) func(c *gin.Context) zap.Field {
+	field := zap.String(key, value)
+	return func(c *gin.Context) zap.Field { return field }
+}
+
+// Int64 custom immutable int64 field
+func Int64(key string, value int64) func(c *gin.Context) zap.Field {
+	field := zap.Int64(key, value)
+	return func(c *gin.Context) zap.Field { return field }
+}
+
+// Uint64 custom immutable uint64 field
+func Uint64(key string, value uint64) func(c *gin.Context) zap.Field {
+	field := zap.Uint64(key, value)
+	return func(c *gin.Context) zap.Field { return field }
+}
+
+// Float64 custom immutable float32 field
+func Float64(key string, value float64) func(c *gin.Context) zap.Field {
+	field := zap.Float64(key, value)
 	return func(c *gin.Context) zap.Field { return field }
 }
