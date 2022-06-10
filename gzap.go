@@ -234,7 +234,7 @@ func Any(key string, value interface{}) func(c *gin.Context) zap.Field {
 }
 
 // String custom immutable string field
-func String(key string, value string) func(c *gin.Context) zap.Field {
+func String(key, value string) func(c *gin.Context) zap.Field {
 	field := zap.String(key, value)
 	return func(c *gin.Context) zap.Field { return field }
 }
