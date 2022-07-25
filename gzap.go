@@ -44,7 +44,7 @@ func WithEnableBody(b bool) Option {
 	}
 }
 
-// WithEnableBody optional custom request/response body limit.
+// WithBodyLimit optional custom request/response body limit.
 // default: <=0, mean not limit
 func WithBodyLimit(limit int) Option {
 	return func(c *Config) {
@@ -60,6 +60,7 @@ func WithFieldName(index int, name string) Option {
 	}
 }
 
+// Indices for renaming field.
 const (
 	FieldStatus = iota
 	FieldMethod
