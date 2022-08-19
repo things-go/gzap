@@ -44,7 +44,7 @@ func WithEnableBody(b bool) Option {
 	}
 }
 
-// WithEnableBody optional custom request/response body limit.
+// WithBodyLimit optional custom request/response body limit.
 // default: <=0, mean not limit
 func WithBodyLimit(limit int) Option {
 	return func(c *Config) {
@@ -52,13 +52,46 @@ func WithBodyLimit(limit int) Option {
 	}
 }
 
+// WithFieldName optionally renames a log field.
+// Example: `WithFieldName(gzap.FieldStatus, "httpStatusCode")`
+func WithFieldName(index int, name string) Option {
+	return func(c *Config) {
+		c.field[index] = name
+	}
+}
+
+// Indices for renaming field.
+const (
+	FieldStatus = iota
+	FieldMethod
+	FieldPath
+	FieldRoute
+	FieldQuery
+	FieldIP
+	FieldUserAgent
+	FieldLatency
+	FieldRequestBody
+	FieldResponseBody
+)
+
 // Config logger/recover config
 type Config struct {
 	customFields []func(c *gin.Context) zap.Field
 	// if returns true, it will skip logging.
 	skipLogging func(c *gin.Context) bool
-	enableBody  bool // enable request/response body
-	limit       int  // <=0: mean not limit
+	enableBody  bool       // enable request/response body
+	limit       int        // <=0: mean not limit
+	field       [10]string // log field names
+}
+
+func newConfig() Config {
+	return Config{
+		customFields: nil,
+		skipLogging:  func(c *gin.Context) bool { return false },
+		enableBody:   false,
+		limit:        0,
+		field:        [10]string{"status", "method", "path", "route", "query", "ip", "user-agent", "latency", "requestBody", "responseBody"},
+	}
 }
 
 // Logger returns a gin.HandlerFunc (middleware) that logs requests using uber-go/zap.
@@ -66,12 +99,7 @@ type Config struct {
 // Requests with errors are logged using zap.Error().
 // Requests without errors are logged using zap.Info().
 func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
-	cfg := Config{
-		nil,
-		func(c *gin.Context) bool { return false },
-		false,
-		0,
-	}
+	cfg := newConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -115,21 +143,21 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 			} else {
 				fields := make([]zap.Field, 0, 8+len(cfg.customFields)+2)
 				fields = append(fields,
-					zap.Int("status", c.Writer.Status()),
-					zap.String("method", c.Request.Method),
-					zap.String("path", path),
-					zap.String("route", c.FullPath()),
-					zap.String("query", query),
-					zap.String("ip", c.ClientIP()),
-					zap.String("user-agent", c.Request.UserAgent()),
-					zap.Duration("latency", time.Since(start)),
+					zap.Int(cfg.field[FieldStatus], c.Writer.Status()),
+					zap.String(cfg.field[FieldMethod], c.Request.Method),
+					zap.String(cfg.field[FieldPath], path),
+					zap.String(cfg.field[FieldRoute], c.FullPath()),
+					zap.String(cfg.field[FieldQuery], query),
+					zap.String(cfg.field[FieldIP], c.ClientIP()),
+					zap.String(cfg.field[FieldUserAgent], c.Request.UserAgent()),
+					zap.Duration(cfg.field[FieldLatency], time.Since(start)),
 				)
 				if cfg.enableBody {
-					fields = append(fields, zap.String("requestBody", reqBody))
+					fields = append(fields, zap.String(cfg.field[FieldRequestBody], reqBody))
 					if cfg.limit > 0 && respBody.Len() >= cfg.limit {
-						fields = append(fields, zap.String("responseBody", "ignore larger response body"))
+						fields = append(fields, zap.String(cfg.field[FieldResponseBody], "ignore larger response body"))
 					} else {
-						fields = append(fields, zap.String("responseBody", respBody.String()))
+						fields = append(fields, zap.String(cfg.field[FieldResponseBody], respBody.String()))
 					}
 				}
 				for _, field := range cfg.customFields {
@@ -149,12 +177,7 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 // stack means whether output the stack info.
 // The stack info is easy to find where the error occurs but the stack info is too large.
 func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
-	cfg := Config{
-		nil,
-		func(c *gin.Context) bool { return false },
-		false,
-		0,
-	}
+	cfg := newConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
