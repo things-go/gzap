@@ -56,7 +56,9 @@ func WithBodyLimit(limit int) Option {
 // Example: `WithFieldName(gzap.FieldStatus, "httpStatusCode")`
 func WithFieldName(index int, name string) Option {
 	return func(c *Config) {
-		c.field[index] = name
+		if index > 0 && index < fieldMaxLen && name != "" {
+			c.field[index] = name
+		}
 	}
 }
 
@@ -72,6 +74,7 @@ const (
 	FieldLatency
 	FieldRequestBody
 	FieldResponseBody
+	fieldMaxLen
 )
 
 // Config logger/recover config
@@ -79,9 +82,9 @@ type Config struct {
 	customFields []func(c *gin.Context) zap.Field
 	// if returns true, it will skip logging.
 	skipLogging func(c *gin.Context) bool
-	enableBody  bool       // enable request/response body
-	limit       int        // <=0: mean not limit
-	field       [10]string // log field names
+	enableBody  bool                // enable request/response body
+	limit       int                 // <=0: mean not limit
+	field       [fieldMaxLen]string // log field names
 }
 
 func newConfig() Config {
@@ -90,7 +93,12 @@ func newConfig() Config {
 		skipLogging:  func(c *gin.Context) bool { return false },
 		enableBody:   false,
 		limit:        0,
-		field:        [10]string{"status", "method", "path", "route", "query", "ip", "user-agent", "latency", "requestBody", "responseBody"},
+		field: [fieldMaxLen]string{
+			"status", "method", "path",
+			"route", "query", "ip",
+			"user-agent", "latency",
+			"requestBody", "responseBody",
+		},
 	}
 }
 
