@@ -36,7 +36,7 @@ func main() {
 	//   - stack means whether output the stack info.
 	r.Use(gzap.Recovery(logger, true,
 		gzap.WithCustomFields(
-			gzap.Immutable("app", "example"),
+			gzap.Any("app", "example"),
 			func(c *gin.Context) zap.Field { return zap.String("custom field1", c.ClientIP()) },
 			func(c *gin.Context) zap.Field { return zap.String("custom field2", c.ClientIP()) },
 		),

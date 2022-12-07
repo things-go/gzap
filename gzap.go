@@ -94,10 +94,16 @@ func newConfig() Config {
 		enableBody:   false,
 		limit:        0,
 		field: [fieldMaxLen]string{
-			"status", "method", "path",
-			"route", "query", "ip",
-			"user-agent", "latency",
-			"requestBody", "responseBody",
+			"status",
+			"method",
+			"path",
+			"route",
+			"query",
+			"ip",
+			"user-agent",
+			"latency",
+			"requestBody",
+			"responseBody",
 		},
 	}
 }
@@ -250,12 +256,6 @@ func (w *bodyWriter) Write(b []byte) (int, error) {
 func (w *bodyWriter) WriteString(s string) (int, error) {
 	w.dupBody.WriteString(s)
 	return w.ResponseWriter.WriteString(s)
-}
-
-// Immutable custom immutable field
-// Deprecated: use Any instead
-func Immutable(key string, value interface{}) func(c *gin.Context) zap.Field {
-	return Any(key, value)
 }
 
 // Any custom immutable any field

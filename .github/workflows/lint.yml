@@ -10,8 +10,9 @@ jobs:
     name: Golangci-Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
-        with:
-          args: -E goimports -E gocritic -E misspell -E revive
+        with: # BUG: typecheck error when enable all
+          args: --disable-all -E goimports,misspell,whitespace
+          version: latest
