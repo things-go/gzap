@@ -222,7 +222,7 @@ func Recovery(logger *zap.Logger, stack bool, opts ...Option) gin.HandlerFunc {
 						zap.ByteString("request", httpRequest),
 					)
 					// If the connection is dead, we can't write a status to it.
-					c.Error(err.(error)) // nolint: errcheck
+					_ = c.Error(err.(error))
 					c.Abort()
 					return
 				}
