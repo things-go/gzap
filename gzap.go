@@ -6,6 +6,7 @@ package gzap
 import (
 	"bytes"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -52,6 +53,24 @@ func WithBodyLimit(limit int) Option {
 	}
 }
 
+// WithSkipRequestBody optional custom skip request body logging option.
+func WithSkipRequestBody(f func(c *gin.Context) bool) Option {
+	return func(c *Config) {
+		if f != nil {
+			c.skipRequestBody = f
+		}
+	}
+}
+
+// WithSkipResponseBody optional custom skip response body logging option.
+func WithSkipResponseBody(f func(c *gin.Context) bool) Option {
+	return func(c *Config) {
+		if f != nil {
+			c.skipResponseBody = f
+		}
+	}
+}
+
 // WithFieldName optionally renames a log field.
 // Example: `WithFieldName(gzap.FieldStatus, "httpStatusCode")`
 func WithFieldName(index int, name string) Option {
@@ -82,17 +101,38 @@ type Config struct {
 	customFields []func(c *gin.Context) zap.Field
 	// if returns true, it will skip logging.
 	skipLogging func(c *gin.Context) bool
-	enableBody  bool                // enable request/response body
-	limit       int                 // <=0: mean not limit
-	field       [fieldMaxLen]string // log field names
+	// if returns true, it will skip request body.
+	skipRequestBody func(c *gin.Context) bool
+	// if returns true, it will skip response body.
+	skipResponseBody func(c *gin.Context) bool
+	enableBody       bool                // enable request/response body
+	limit            int                 // <=0: mean not limit
+	field            [fieldMaxLen]string // log field names
+}
+
+func skipRequestBody(c *gin.Context) bool {
+	v := c.Request.Header.Get("Content-Type")
+	d, params, err := mime.ParseMediaType(v)
+	if err != nil || !(d == "multipart/form-data" || d == "multipart/mixed") {
+		return false
+	}
+	_, ok := params["boundary"]
+	return ok
+}
+
+func skipResponseBody(c *gin.Context) bool {
+	// TODO: add skip response body rule
+	return false
 }
 
 func newConfig() Config {
 	return Config{
-		customFields: nil,
-		skipLogging:  func(c *gin.Context) bool { return false },
-		enableBody:   false,
-		limit:        0,
+		customFields:     nil,
+		skipLogging:      func(c *gin.Context) bool { return false },
+		skipRequestBody:  func(c *gin.Context) bool { return false },
+		skipResponseBody: func(c *gin.Context) bool { return false },
+		enableBody:       false,
+		limit:            0,
 		field: [fieldMaxLen]string{
 			"status",
 			"method",
@@ -118,24 +158,25 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 		opt(&cfg)
 	}
 	return func(c *gin.Context) {
-		respBody := &strings.Builder{}
-		reqBody := ""
+		respBodyBuilder := &strings.Builder{}
+		reqBody := "skip request body"
 
 		if cfg.enableBody {
-			c.Writer = &bodyWriter{ResponseWriter: c.Writer, dupBody: respBody}
-			reqBodyBuf, err := io.ReadAll(c.Request.Body)
-			if err != nil {
-				c.String(http.StatusInternalServerError, err.Error())
-				c.Abort()
-				return
-			}
-			c.Request.Body.Close()
-			c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBodyBuf))
-
-			if cfg.limit > 0 && len(reqBodyBuf) >= cfg.limit {
-				reqBody = "ignore larger req body"
-			} else {
-				reqBody = string(reqBodyBuf)
+			c.Writer = &bodyWriter{ResponseWriter: c.Writer, dupBody: respBodyBuilder}
+			if hasSkipRequestBody := skipRequestBody(c) || cfg.skipRequestBody(c); !hasSkipRequestBody {
+				reqBodyBuf, err := io.ReadAll(c.Request.Body)
+				if err != nil {
+					c.String(http.StatusInternalServerError, err.Error())
+					c.Abort()
+					return
+				}
+				c.Request.Body.Close()
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBodyBuf))
+				if cfg.limit > 0 && len(reqBodyBuf) >= cfg.limit {
+					reqBody = "larger request body"
+				} else {
+					reqBody = string(reqBodyBuf)
+				}
 			}
 		}
 
@@ -167,15 +208,21 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 					zap.Duration(cfg.field[FieldLatency], time.Since(start)),
 				)
 				if cfg.enableBody {
-					fields = append(fields, zap.String(cfg.field[FieldRequestBody], reqBody))
-					if cfg.limit > 0 && respBody.Len() >= cfg.limit {
-						fields = append(fields, zap.String(cfg.field[FieldResponseBody], "ignore larger response body"))
-					} else {
-						fields = append(fields, zap.String(cfg.field[FieldResponseBody], respBody.String()))
+					respBody := "skip response body"
+					if hasSkipResponseBody := skipResponseBody(c) || cfg.skipResponseBody(c); !hasSkipResponseBody {
+						if cfg.limit > 0 && respBodyBuilder.Len() >= cfg.limit {
+							respBody = "larger response body"
+						} else {
+							respBody = respBodyBuilder.String()
+						}
 					}
+					fields = append(fields,
+						zap.String(cfg.field[FieldRequestBody], reqBody),
+						zap.String(cfg.field[FieldResponseBody], respBody),
+					)
 				}
-				for _, field := range cfg.customFields {
-					fields = append(fields, field(c))
+				for _, fieldFunc := range cfg.customFields {
+					fields = append(fields, fieldFunc(c))
 				}
 				logger.Info("logging", fields...)
 			}
