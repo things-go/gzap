@@ -143,10 +143,13 @@ func skipResponseBody(c *gin.Context) bool {
 
 func useLoggerLevel(c *gin.Context) zapcore.Level {
 	status := c.Writer.Status()
-	if status >= http.StatusInternalServerError && status <= http.StatusNetworkAuthenticationRequired {
+	if status >= http.StatusInternalServerError &&
+		status <= http.StatusNetworkAuthenticationRequired {
 		return zap.ErrorLevel
 	}
-	if status >= http.StatusBadRequest && status <= http.StatusUnavailableForLegalReasons {
+	if status >= http.StatusBadRequest &&
+		status <= http.StatusUnavailableForLegalReasons &&
+		status != http.StatusUnauthorized {
 		return zap.WarnLevel
 	}
 	return zap.InfoLevel
