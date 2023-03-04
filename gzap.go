@@ -261,7 +261,6 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 				}
 			}
 			logger.Log(level, "logging", fields...)
-
 		}()
 
 		c.Next()
