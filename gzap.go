@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Option logger/recover option
@@ -71,6 +72,15 @@ func WithSkipResponseBody(f func(c *gin.Context) bool) Option {
 	}
 }
 
+// WithUseLoggerLevel optional use logging level.
+func WithUseLoggerLevel(f func(c *gin.Context) zapcore.Level) Option {
+	return func(c *Config) {
+		if f != nil {
+			c.useLoggerLevel = f
+		}
+	}
+}
+
 // WithFieldName optionally renames a log field.
 // Example: `WithFieldName(gzap.FieldStatus, "httpStatusCode")`
 func WithFieldName(index int, name string) Option {
@@ -105,9 +115,15 @@ type Config struct {
 	skipRequestBody func(c *gin.Context) bool
 	// if returns true, it will skip response body.
 	skipResponseBody func(c *gin.Context) bool
-	enableBody       bool                // enable request/response body
-	limit            int                 // <=0: mean not limit
-	field            [fieldMaxLen]string // log field names
+	// use logger level,
+	// default:
+	// 	zap.ErrorLevel: when status >= http.StatusInternalServerError && status <= http.StatusNetworkAuthenticationRequired
+	// 	zap.WarnLevel: when status >= http.StatusBadRequest && status <= http.StatusUnavailableForLegalReasons
+	//  zap.InfoLevel: otherwise.
+	useLoggerLevel func(c *gin.Context) zapcore.Level
+	enableBody     bool                // enable request/response body
+	limit          int                 // <=0: mean not limit
+	field          [fieldMaxLen]string // log field names
 }
 
 func skipRequestBody(c *gin.Context) bool {
@@ -125,12 +141,24 @@ func skipResponseBody(c *gin.Context) bool {
 	return false
 }
 
+func useLoggerLevel(c *gin.Context) zapcore.Level {
+	status := c.Writer.Status()
+	if status >= http.StatusInternalServerError && status <= http.StatusNetworkAuthenticationRequired {
+		return zap.ErrorLevel
+	}
+	if status >= http.StatusBadRequest && status <= http.StatusUnavailableForLegalReasons {
+		return zap.WarnLevel
+	}
+	return zap.InfoLevel
+}
+
 func newConfig() Config {
 	return Config{
 		customFields:     nil,
 		skipLogging:      func(c *gin.Context) bool { return false },
 		skipRequestBody:  func(c *gin.Context) bool { return false },
 		skipResponseBody: func(c *gin.Context) bool { return false },
+		useLoggerLevel:   useLoggerLevel,
 		enableBody:       false,
 		limit:            0,
 		field: [fieldMaxLen]string{
@@ -189,43 +217,51 @@ func Logger(logger *zap.Logger, opts ...Option) gin.HandlerFunc {
 			if cfg.skipLogging(c) {
 				return
 			}
+			var level zapcore.Level
 
+			fieldLength := 8 + len(cfg.customFields) + 2
 			if len(c.Errors) > 0 {
-				// Append error field if this is an erroneous request.
-				for _, e := range c.Errors.Errors() {
-					logger.Error(e)
-				}
+				level = zapcore.ErrorLevel
+				fieldLength += len(c.Errors)
 			} else {
-				fields := make([]zap.Field, 0, 8+len(cfg.customFields)+2)
-				fields = append(fields,
-					zap.Int(cfg.field[FieldStatus], c.Writer.Status()),
-					zap.String(cfg.field[FieldMethod], c.Request.Method),
-					zap.String(cfg.field[FieldPath], path),
-					zap.String(cfg.field[FieldRoute], c.FullPath()),
-					zap.String(cfg.field[FieldQuery], query),
-					zap.String(cfg.field[FieldIP], c.ClientIP()),
-					zap.String(cfg.field[FieldUserAgent], c.Request.UserAgent()),
-					zap.Duration(cfg.field[FieldLatency], time.Since(start)),
-				)
-				if cfg.enableBody {
-					respBody := "skip response body"
-					if hasSkipResponseBody := skipResponseBody(c) || cfg.skipResponseBody(c); !hasSkipResponseBody {
-						if cfg.limit > 0 && respBodyBuilder.Len() >= cfg.limit {
-							respBody = "larger response body"
-						} else {
-							respBody = respBodyBuilder.String()
-						}
-					}
-					fields = append(fields,
-						zap.String(cfg.field[FieldRequestBody], reqBody),
-						zap.String(cfg.field[FieldResponseBody], respBody),
-					)
-				}
-				for _, fieldFunc := range cfg.customFields {
-					fields = append(fields, fieldFunc(c))
-				}
-				logger.Info("logging", fields...)
+				level = cfg.useLoggerLevel(c)
 			}
+
+			fields := make([]zap.Field, 0, fieldLength)
+			fields = append(fields,
+				zap.Int(cfg.field[FieldStatus], c.Writer.Status()),
+				zap.String(cfg.field[FieldMethod], c.Request.Method),
+				zap.String(cfg.field[FieldPath], path),
+				zap.String(cfg.field[FieldRoute], c.FullPath()),
+				zap.String(cfg.field[FieldQuery], query),
+				zap.String(cfg.field[FieldIP], c.ClientIP()),
+				zap.String(cfg.field[FieldUserAgent], c.Request.UserAgent()),
+				zap.Duration(cfg.field[FieldLatency], time.Since(start)),
+			)
+			if cfg.enableBody {
+				respBody := "skip response body"
+				if hasSkipResponseBody := skipResponseBody(c) || cfg.skipResponseBody(c); !hasSkipResponseBody {
+					if cfg.limit > 0 && respBodyBuilder.Len() >= cfg.limit {
+						respBody = "larger response body"
+					} else {
+						respBody = respBodyBuilder.String()
+					}
+				}
+				fields = append(fields,
+					zap.String(cfg.field[FieldRequestBody], reqBody),
+					zap.String(cfg.field[FieldResponseBody], respBody),
+				)
+			}
+			for _, fieldFunc := range cfg.customFields {
+				fields = append(fields, fieldFunc(c))
+			}
+			if len(c.Errors) > 0 {
+				for _, e := range c.Errors {
+					fields = append(fields, zap.Error(e))
+				}
+			}
+			logger.Log(level, "logging", fields...)
+
 		}()
 
 		c.Next()
